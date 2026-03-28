@@ -1,0 +1,582 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  qa_director
+  lab_head
+  qc_analyst
+  partner
+}
+
+enum LabType {
+  internal
+  partner
+  contract
+}
+
+enum LabStatus {
+  active
+  inactive
+  suspended
+  under_review
+}
+
+enum CertStatus {
+  valid
+  renewal_due
+  expired
+  pending
+}
+
+enum CapaStatus {
+  open
+  in_progress
+  pending_verification
+  closed
+  overdue
+}
+
+enum CapaSeverity {
+  critical
+  major
+  minor
+  observation
+}
+
+enum AuditType {
+  internal
+  external
+  gmp
+  nabl
+  usfda
+  iso
+}
+
+enum AuditStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum SopStatus {
+  draft
+  under_review
+  approved
+  obsolete
+  superseded
+}
+
+enum BatchStatus {
+  in_progress
+  qc_hold
+  released
+  rejected
+  pending_release
+}
+
+enum DocStatus {
+  draft
+  under_review
+  approved
+  obsolete
+  archived
+}
+
+enum RequestStatus {
+  pending
+  accepted
+  in_progress
+  completed
+  cancelled
+  overdue
+}
+
+enum RequestPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum WorkflowType {
+  capa
+  batch_release
+  sop_approval
+  partner_onboarding
+  test_request_approval
+  document_approval
+}
+
+enum StepStatus {
+  pending
+  in_progress
+  completed
+  rejected
+  skipped
+}
+
+enum NotificationType {
+  cert_expiry_critical
+  cert_expiry_warning
+  capa_deadline_critical
+  capa_overdue
+  test_request_submitted
+  integration_update
+  audit_finding_critical
+  workflow_update
+  system
+}
+
+enum IntegrationStatus {
+  connected
+  in_progress
+  planned
+  disconnected
+  error
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(qc_analyst)
+  labId        String?
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lab             Lab?           @relation(fields: [labId], references: [id])
+  notifications   Notification[]
+  workflowSteps   WorkflowStep[]
+  createdCapas    Capa[]         @relation("CapaCreator")
+  assignedCapas   Capa[]         @relation("CapaOwner")
+  createdBatches  BatchRecord[]
+  createdSops     Sop[]
+  createdDocuments Document[]
+  createdRequests TestRequest[]
+  auditsConducted Audit[]
+
+  @@map("users")
+}
+
+model Lab {
+  id           String    @id @default(cuid())
+  labCode      String    @unique
+  name         String
+  type         LabType
+  status       LabStatus @default(active)
+  city         String
+  state        String
+  address      String?
+  country      String    @default("India")
+  lat          Float?
+  lng          Float?
+  capacity     Int
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  riskScore    Float     @default(0)
+  auditScore   Float     @default(0)
+  rating       Float     @default(0)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String?
+
+  users          User[]
+  equipment      Equipment[]
+  certifications Certification[]
+  capass         Capa[]
+  audits         Audit[]
+  testRequests   TestRequest[]
+  batchRecords   BatchRecord[]
+  ratingHistory  LabRatingHistory[]
+  partners       Partner[]
+
+  @@map("labs")
+}
+
+model LabRatingHistory {
+  id         String   @id @default(cuid())
+  labId      String
+  month      Int
+  year       Int
+  riskScore  Float
+  auditScore Float
+  rating     Float
+  capaCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  lab Lab @relation(fields: [labId], references: [id])
+
+  @@unique([labId, month, year])
+  @@map("lab_rating_history")
+}
+
+model Equipment {
+  id             String    @id @default(cuid())
+  labId          String
+  name           String
+  equipCode      String    @unique
+  type           String
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  calibrationDue DateTime?
+  status         String    @default("operational")
+  capabilities   String[]
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      String?
+
+  lab                Lab                    @relation(fields: [labId], references: [id])
+  utilisationRecords EquipmentUtilisation[]
+
+  @@map("equipment")
+}
+
+model EquipmentUtilisation {
+  id             String   @id @default(cuid())
+  equipmentId    String
+  quarter        Int
+  year           Int
+  utilisationPct Float
+  hoursUsed      Float
+  totalCapacity  Float
+  createdAt      DateTime @default(now())
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id])
+
+  @@unique([equipmentId, quarter, year])
+  @@map("equipment_utilisation")
+}
+
+model Certification {
+  id             String     @id @default(cuid())
+  certCode       String     @unique
+  labId          String
+  name           String
+  certifyingBody String
+  certType       String
+  issueDate      DateTime
+  expiryDate     DateTime
+  status         CertStatus @default(valid)
+  documentUrl    String?
+  renewalNotes   String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  createdBy      String?
+
+  lab Lab @relation(fields: [labId], references: [id])
+
+  @@map("certifications")
+}
+
+model Partner {
+  id             String    @id @default(cuid())
+  labId          String
+  specialization String[]
+  onboardedAt    DateTime  @default(now())
+  contractStart  DateTime?
+  contractEnd    DateTime?
+  slaTerms       String?
+  paymentTerms   String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      String?
+
+  lab Lab @relation(fields: [labId], references: [id])
+
+  @@map("partners")
+}
+
+model Capa {
+  id          String       @id @default(cuid())
+  capaCode    String       @unique
+  labId       String?
+  title       String
+  source      String
+  product     String?
+  batchNo     String?
+  department  String?
+  severity    CapaSeverity
+  status      CapaStatus   @default(open)
+  description String
+  rootCause   String?
+  actionPlan  String?
+  ownerId     String?
+  createdById String
+  dueDate     DateTime
+  closedAt    DateTime?
+  verifiedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  lab          Lab?          @relation(fields: [labId], references: [id])
+  owner        User?         @relation("CapaOwner", fields: [ownerId], references: [id])
+  createdBy    User          @relation("CapaCreator", fields: [createdById], references: [id])
+  workflowRuns WorkflowRun[]
+
+  @@map("capass")
+}
+
+model Audit {
+  id            String      @id @default(cuid())
+  auditCode     String      @unique
+  labId         String
+  type          AuditType
+  status        AuditStatus @default(scheduled)
+  scheduledDate DateTime
+  completedDate DateTime?
+  auditorId     String?
+  auditorName   String
+  score         Float?
+  summary       String?
+  findings      Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  createdBy     String?
+
+  lab     Lab   @relation(fields: [labId], references: [id])
+  auditor User? @relation(fields: [auditorId], references: [id])
+
+  @@map("audits")
+}
+
+model Sop {
+  id            String    @id @default(cuid())
+  sopCode       String    @unique
+  title         String
+  department    String
+  category      String?
+  status        SopStatus @default(draft)
+  version       String    @default("1.0")
+  effectiveDate DateTime?
+  reviewDate    DateTime?
+  ownerId       String?
+  ownerName     String
+  description   String?
+  content       String?
+  documentUrl   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  createdBy     String?
+
+  owner    User?        @relation(fields: [ownerId], references: [id])
+  versions SopVersion[]
+
+  @@map("sops")
+}
+
+model SopVersion {
+  id          String    @id @default(cuid())
+  sopId       String
+  version     String
+  changes     String?
+  documentUrl String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+
+  sop Sop @relation(fields: [sopId], references: [id])
+
+  @@map("sop_versions")
+}
+
+model BatchRecord {
+  id          String      @id @default(cuid())
+  batchNo     String      @unique
+  labId       String?
+  product     String
+  stage       String
+  quantity    Float
+  unit        String      @default("kg")
+  yield       Float?
+  yieldPct    Float?
+  qcResult    String?
+  status      BatchStatus @default(in_progress)
+  releaseDate DateTime?
+  ownerId     String?
+  ownerName   String
+  notes       String?
+  qcValues    Json?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  createdBy   String?
+
+  lab          Lab?          @relation(fields: [labId], references: [id])
+  owner        User?         @relation(fields: [ownerId], references: [id])
+  workflowRuns WorkflowRun[]
+
+  @@map("batch_records")
+}
+
+model Document {
+  id         String    @id @default(cuid())
+  docCode    String    @unique
+  title      String
+  type       String
+  department String
+  version    String    @default("1.0")
+  status     DocStatus @default(draft)
+  fileUrl    String?
+  fileSize   Int?
+  fileFormat String?
+  tags       String[]
+  ownerId    String?
+  ownerName  String
+  uploadedAt DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  createdBy  String?
+
+  owner User? @relation(fields: [ownerId], references: [id])
+
+  @@map("documents")
+}
+
+model TestRequest {
+  id          String          @id @default(cuid())
+  requestCode String          @unique
+  labId       String
+  testType    String
+  product     String
+  batchNo     String?
+  priority    RequestPriority @default(medium)
+  status      RequestStatus   @default(pending)
+  dueDate     DateTime?
+  quote       Float?
+  currency    String          @default("INR")
+  description String?
+  results     String?
+  reportUrl   String?
+  createdById String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  lab          Lab          @relation(fields: [labId], references: [id])
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  workflowRuns WorkflowRun[]
+
+  @@map("test_requests")
+}
+
+model Workflow {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  type        WorkflowType
+  description String?
+  steps       Json
+  avgDays     Float?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  runs WorkflowRun[]
+
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id          String    @id @default(cuid())
+  workflowId  String
+  triggeredBy String
+  capaId      String?
+  batchId     String?
+  requestId   String?
+  currentStep Int       @default(0)
+  status      String    @default("active")
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workflow Workflow     @relation(fields: [workflowId], references: [id])
+  capa     Capa?        @relation(fields: [capaId], references: [id])
+  batch    BatchRecord? @relation(fields: [batchId], references: [id])
+  request  TestRequest? @relation(fields: [requestId], references: [id])
+  steps    WorkflowStep[]
+
+  @@map("workflow_runs")
+}
+
+model WorkflowStep {
+  id            String     @id @default(cuid())
+  workflowRunId String
+  stepNumber    Int
+  name          String
+  assignedTo    String?
+  status        StepStatus @default(pending)
+  notes         String?
+  completedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  workflowRun WorkflowRun @relation(fields: [workflowRunId], references: [id])
+  assignee    User?       @relation(fields: [assignedTo], references: [id])
+
+  @@map("workflow_steps")
+}
+
+model Integration {
+  id          String            @id @default(cuid())
+  name        String
+  type        String
+  description String?
+  iconUrl     String?
+  dataFlow    String
+  status      IntegrationStatus @default(planned)
+  connectedAt DateTime?
+  config      Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("integrations")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model AnalyticsSnapshot {
+  id                 String   @id @default(cuid())
+  month              Int
+  year               Int
+  qualityScore       Float?
+  capaResolutionDays Float?
+  certComplianceRate Float?
+  totalBatches       Int?
+  releasedBatches    Int?
+  holdBatches        Int?
+  testRequestCount   Int?
+  testRequestValue   Float?
+  createdAt          DateTime @default(now())
+
+  @@unique([month, year])
+  @@map("analytics_snapshots")
+}

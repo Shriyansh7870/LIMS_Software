@@ -1,0 +1,40 @@
+import { Router } from 'express';
+import authRoutes from './auth';
+import dashboardRoutes from './dashboard';
+import labRoutes from './labs';
+import equipmentRoutes from './equipment';
+import certificationRoutes from './certifications';
+import partnerRoutes from './partners';
+import capaRoutes from './capa';
+import auditRoutes from './audits';
+import sopRoutes from './sops';
+import batchRoutes from './batches';
+import documentRoutes from './documents';
+import requestRoutes from './requests';
+import workflowRoutes from './workflows';
+import integrationRoutes from './integrations';
+import notificationRoutes from './notifications';
+import analyticsRoutes from './analytics';
+import searchRoutes from './search';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/labs', labRoutes);
+router.use('/equipment', equipmentRoutes);
+router.use('/certifications', certificationRoutes);
+router.use('/partners', partnerRoutes);
+router.use('/capa', capaRoutes);
+router.use('/audits', auditRoutes);
+router.use('/sops', sopRoutes);
+router.use('/batches', batchRoutes);
+router.use('/documents', documentRoutes);
+router.use('/requests', requestRoutes);
+router.use('/workflows', workflowRoutes);
+router.use('/integrations', integrationRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/search', searchRoutes);
+
+export default router;
